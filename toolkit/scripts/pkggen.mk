@@ -67,6 +67,11 @@ $(graph_file): $(specs_file) $(go-grapher)
 		$(logging_command) \
 		--output $@
 
+graphoptimizer_extra_flags :=
+ifeq ($(REBUILD_DEP_CHAINS), y)
+graphoptimizer_extra_flags += --rebuild-missing-dep-chains
+endif
+
 # Remove any packages which don't need to be built, and flag any for rebuild if
 # their dependencies are updated.
 ifneq ($(CONFIG_FILE),)
@@ -80,13 +85,13 @@ $(optimized_file): $(graph_file) $(go-graphoptimizer) $(depend_PACKAGE_BUILD_LIS
 		--input $(graph_file) \
 		--rpm-dir $(RPMS_DIR) \
 		--dist-tag $(DIST_TAG) \
-		--rebuild-missing-dep-chains \
 		--packages "$(PACKAGE_BUILD_LIST)" \
 		--rebuild-packages="$(PACKAGE_REBUILD_LIST)" \
 		--ignore-packages="$(PACKAGE_IGNORE_LIST)" \
 		--image-config-file="$(CONFIG_FILE)" \
 		$(if $(CONFIG_FILE),--base-dir=$(CONFIG_BASE_DIR)) \
 		$(logging_command) \
+		$(graphoptimizer_extra_flags) \
 		--output $@
 
 # We want to detect changes in the RPM cache, but we are not responsible for directly rebuilding any missing files.
@@ -182,13 +187,13 @@ endif
 		$(call print_error,Failed to build: $$(cat $(LOGS_DIR)/pkggen/failures.txt)); } && \
 	touch $@
 
-# use temp tarball to avoid tar warning "file changed as we read it" 
+# use temp tarball to avoid tar warning "file changed as we read it"
 # that can sporadically occur when tarball is the dir that is compressed
 compress-rpms:
 	tar -I $(ARCHIVE_TOOL) -cvp -f $(BUILD_DIR)/temp_rpms_tarball.tar.gz -C $(RPMS_DIR)/.. $(notdir $(RPMS_DIR))
 	mv $(BUILD_DIR)/temp_rpms_tarball.tar.gz $(pkggen_archive)
 
-# use temp tarball to avoid tar warning "file changed as we read it" 
+# use temp tarball to avoid tar warning "file changed as we read it"
 # that can sporadically occur when tarball is the dir that is compressed
 compress-srpms:
 	tar -I $(ARCHIVE_TOOL) -cvp -f $(BUILD_DIR)/temp_srpms_tarball.tar.gz -C $(SRPMS_DIR)/.. $(notdir $(SRPMS_DIR))

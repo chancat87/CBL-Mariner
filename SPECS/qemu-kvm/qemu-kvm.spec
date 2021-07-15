@@ -1,7 +1,7 @@
 Summary:        QEMU is a machine emulator and virtualizer
 Name:           qemu-kvm
 Version:        4.2.0
-Release:        27%{?dist}
+Release:        33%{?dist}
 License:        GPLv2 AND GPLv2+ AND CC-BY AND BSD
 Vendor:         Microsoft Corporation
 Distribution:   Mariner
@@ -47,6 +47,14 @@ Patch28:        CVE-2020-27821.patch
 Patch29:        CVE-2020-17380.patch
 Patch30:        CVE-2021-20203.patch
 Patch31:        CVE-2021-20255.patch
+Patch32:        CVE-2021-3416.patch
+Patch33:        CVE-2021-3392.patch
+Patch34:        CVE-2021-3409.patch
+Patch35:        CVE-2021-20181.patch
+Patch36:        CVE-2021-20221.patch
+Patch37:        CVE-2021-3527.patch
+Patch38:        CVE-2020-27661.nopatch
+
 BuildRequires:  alsa-lib-devel
 BuildRequires:  glib-devel
 BuildRequires:  pixman-devel
@@ -103,6 +111,15 @@ This package provides a command line tool for manipulating disk images.
 %patch29 -p1
 %patch30 -p1
 %patch31 -p1
+%patch32 -p1
+%patch33 -p1
+%patch34 -p1
+%patch35 -p1
+%patch36 -p1
+%patch37 -p1
+
+# Remove invalid flag exposed by binutils 2.36.1
+sed -i "/LDFLAGS_NOPIE/d" configure
 
 %build
 
@@ -138,7 +155,43 @@ ln -sv qemu-system-`uname -m` %{buildroot}%{_bindir}/qemu
 chmod 755 %{buildroot}%{_bindir}/qemu
 
 %check
-# Deliberately empty
+testsPassed=true
+make check-unit
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+make check-qtest
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+make check-speed
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+make check-qapi-schema
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+make check-block
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+make check-tcg
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+make check-softfloat
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+make check-acceptance
+if [ $? -ne 0 ]; then
+    testsPassed=false
+fi
+if [ "$testsPassed" = false ] ; then
+    echo 'One (or more) tests failed. Check log for further details'
+    (exit 1)
+fi
 
 %files
 %defattr(-,root,root)
@@ -163,6 +216,25 @@ chmod 755 %{buildroot}%{_bindir}/qemu
 %{_bindir}/qemu-nbd
 
 %changelog
+* Tue Jun 22 2021 Suresh Babu Chalamalasetty <schalam@microsoft.com> - 4.2.0-33
+- Mark CVE-2020-27661 as nopatch
+
+* Thu Jun 17 2021 Nicolas Ontiveros <niontive@microsoft.com> - 4.2.0-32
+- Patch CVE-2021-20221
+- Patch CVE-2021-3527
+
+* Mon Jun 07 2021 Henry Beberman <henry.beberman@microsoft.com> - 4.2.0-31
+- Patch CVE-2021-20181
+
+* Tue May 11 2021 Andrew Phelps <anphel@microsoft.com> - 4.2.0-30
+- Remove LDFLAGS_NOPIE to compile with binutils 2.36.1
+
+* Wed Apr 07 2021 Neha Agarwal <nehaagarwal@microsoft.com> - 4.2.0-29
+- Patch CVE-2021-3392 and CVE-2021-3409.
+
+* Tue Mar 30 2021 Neha Agarwal <nehaagarwal@microsoft.com> - 4.2.0-28
+- Patch CVE-2021-3416. Added test modules under check section.
+
 * Tue Mar 23 2021 Neha Agarwal <nehaagarwal@microsoft.com> - 4.2.0-27
 - Patch CVE-2021-20255
 
@@ -241,7 +313,7 @@ chmod 755 %{buildroot}%{_bindir}/qemu
 * Thu May 21 2020 Suresh Babu Chalamalasetty <schalam@microsoft.com> - 4.2.0-8
 - Fix CVE-2020-1711 and CVE-2020-7211.
 
-* Sat May 09 00:20:51 PST 2020 Nick Samson <nisamson@microsoft.com> - 4.2.0-7
+* Sat May 09 2020 Nick Samson <nisamson@microsoft.com> - 4.2.0-7
 - Added %%license line automatically
 
 * Fri May  1 2020 Emre Girgin <mrgirgin@microsoft.com> - 4.2.0-6

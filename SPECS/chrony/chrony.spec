@@ -4,7 +4,7 @@
 
 Name:           chrony
 Version:        3.5.1
-Release:        3%{?dist}
+Release:        5%{?dist}
 Summary:        An NTP client/server
 Vendor:         Microsoft Corporation
 Distribution:   Mariner
@@ -30,7 +30,7 @@ BuildRequires:  gnupg2
 BuildRequires:  libcap-devel
 BuildRequires:  libedit-devel
 BuildRequires:  libseccomp-devel
-BuildRequires:  nettle-devel
+BuildRequires:  nettle-devel >= 3.7.2
 BuildRequires:  systemd
 
 %if %{with_check}
@@ -91,6 +91,8 @@ cat >> chrony.conf << EOF
 
 # Setting larger 'maxdistance' to tolerate time.windows.com delay
 maxdistance 16.0
+# Disable listening on UDP port (leaving only Unix socket interface).
+cmdport 0
 EOF
 
 touch -r examples/chrony.conf.example2 examples/chrony-wait.service chrony.conf
@@ -201,6 +203,12 @@ systemctl start chronyd.service
 %dir %attr(-,chrony,chrony) %{_localstatedir}/log/chrony
 
 %changelog
+* Wed Jun 23 2021 Mateusz Malisz <mamalisz@microsoft.com> - 3.5.1-5
+- Make chronyd not listen on UDP port by default.
+
+* Tue Apr 13 2021 Rachel Menge <rachelmenge@microsoft.com> - 3.5.1-4
+- Bump release to rebuild with new nettle (3.7.2)
+
 * Fri Jan 15 2021 Andrew Phelps <anphel@microsoft.com> - 3.5.1-3
 - Add build requirements needed for check tests
 

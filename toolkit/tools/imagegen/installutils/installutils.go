@@ -286,7 +286,9 @@ func umount(path string) (err error) {
 }
 
 // PackageNamesFromSingleSystemConfig goes through the packageslist field in the systemconfig and extracts the list of packages
-// from each of the packagelists
+// from each of the packagelists.
+// NOTE: the package list contains the versions restrictions for the packages, if present, in the form "[package][condition][version]".
+//       Example: gcc=9.1.0
 // - systemConfig is the systemconfig field from the config file
 // Since kernel is not part of the packagelist, it is added separately from KernelOptions.
 func PackageNamesFromSingleSystemConfig(systemConfig configuration.SystemConfig) (finalPkgList []string, err error) {
@@ -354,9 +356,15 @@ func PackageNamesFromConfig(config configuration.Config) (packageList []*pkgjson
 
 		packages := make([]*pkgjson.PackageVer, 0, len(packagesToInstall))
 		for _, pkg := range packagesToInstall {
-			packages = append(packages, &pkgjson.PackageVer{
-				Name: pkg,
-			})
+			var packageVer *pkgjson.PackageVer
+
+			packageVer, err = pkgjson.PackagesListEntryToPackageVer(pkg)
+			if err != nil {
+				logger.Log.Errorf("Failed to parse packages list from system config \"%s\".", systemCfg.Name)
+				return
+			}
+
+			packages = append(packages, packageVer)
 		}
 
 		packageList = append(packageList, packages...)
@@ -373,8 +381,9 @@ func PackageNamesFromConfig(config configuration.Config) (packageList []*pkgjson
 // - mountPointToMountArgsMap is a map of mountpoints to mount options
 // - isRootFS specifies if the installroot is either backed by a directory (rootfs) or a raw disk
 // - encryptedRoot stores information about the encrypted root device if root encryption is enabled
-//- diffDiskBuild is a flag that denotes whether this is a diffdisk build or not
-func PopulateInstallRoot(installChroot *safechroot.Chroot, packagesToInstall []string, config configuration.SystemConfig, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap map[string]string, isRootFS bool, encryptedRoot diskutils.EncryptedRootDevice, diffDiskBuild bool) (err error) {
+// - diffDiskBuild is a flag that denotes whether this is a diffdisk build or not
+// - hidepidEnabled is a flag that denotes whether /proc will be mounted with the hidepid option
+func PopulateInstallRoot(installChroot *safechroot.Chroot, packagesToInstall []string, config configuration.SystemConfig, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap map[string]string, isRootFS bool, encryptedRoot diskutils.EncryptedRootDevice, diffDiskBuild, hidepidEnabled bool) (err error) {
 	const (
 		filesystemPkg = "filesystem"
 	)
@@ -446,7 +455,7 @@ func PopulateInstallRoot(installChroot *safechroot.Chroot, packagesToInstall []s
 
 	if !isRootFS {
 		// Configure system files
-		err = configureSystemFiles(installChroot, hostname, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap, encryptedRoot)
+		err = configureSystemFiles(installChroot, hostname, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap, encryptedRoot, hidepidEnabled)
 		if err != nil {
 			return
 		}
@@ -599,7 +608,7 @@ func initializeTdnfConfiguration(installRoot string) (err error) {
 	return
 }
 
-func configureSystemFiles(installChroot *safechroot.Chroot, hostname string, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap map[string]string, encryptedRoot diskutils.EncryptedRootDevice) (err error) {
+func configureSystemFiles(installChroot *safechroot.Chroot, hostname string, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap map[string]string, encryptedRoot diskutils.EncryptedRootDevice, hidepidEnabled bool) (err error) {
 	// Update hosts file
 	err = updateHosts(installChroot.RootDir(), hostname)
 	if err != nil {
@@ -607,7 +616,7 @@ func configureSystemFiles(installChroot *safechroot.Chroot, hostname string, ins
 	}
 
 	// Update fstab
-	err = updateFstab(installChroot.RootDir(), installMap, mountPointToFsTypeMap, mountPointToMountArgsMap)
+	err = updateFstab(installChroot.RootDir(), installMap, mountPointToFsTypeMap, mountPointToMountArgsMap, hidepidEnabled)
 	if err != nil {
 		return
 	}
@@ -695,7 +704,7 @@ func addMachineID(installChroot *safechroot.Chroot) (err error) {
 
 	const (
 		machineIDFile      = "/etc/machine-id"
-		machineIDFilePerms = 0644
+		machineIDFilePerms = 0444
 	)
 
 	ReportAction("Configuring machine id")
@@ -761,21 +770,31 @@ func updateInitramfsForEncrypt(installChroot *safechroot.Chroot) (err error) {
 	return
 }
 
-func updateFstab(installRoot string, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap map[string]string) (err error) {
+func updateFstab(installRoot string, installMap, mountPointToFsTypeMap, mountPointToMountArgsMap map[string]string, hidepidEnabled bool) (err error) {
+	const (
+		doPseudoFsMount = true
+	)
 	ReportAction("Configuring fstab")
 
 	for mountPoint, devicePath := range installMap {
 		if mountPoint != "" && devicePath != NullDevice {
-			err = addEntryToFstab(installRoot, mountPoint, devicePath, mountPointToFsTypeMap[mountPoint], mountPointToMountArgsMap[mountPoint])
+			err = addEntryToFstab(installRoot, mountPoint, devicePath, mountPointToFsTypeMap[mountPoint], mountPointToMountArgsMap[mountPoint], !doPseudoFsMount)
 			if err != nil {
 				return
 			}
 		}
 	}
+
+	if hidepidEnabled {
+		err = addEntryToFstab(installRoot, "/proc", "proc", "proc", "rw,nosuid,nodev,noexec,relatime,hidepid=2", doPseudoFsMount)
+		if err != nil {
+			return
+		}
+	}
 	return
 }
 
-func addEntryToFstab(installRoot, mountPoint, devicePath, fsType, mountArgs string) (err error) {
+func addEntryToFstab(installRoot, mountPoint, devicePath, fsType, mountArgs string, doPseudoFsMount bool) (err error) {
 	const (
 		uuidPrefix       = "UUID="
 		fstabPath        = "/etc/fstab"
@@ -803,9 +822,7 @@ func addEntryToFstab(installRoot, mountPoint, devicePath, fsType, mountArgs stri
 
 	// Get the block device
 	var device string
-	if diskutils.IsEncryptedDevice(devicePath) {
-		device = devicePath
-	} else if diskutils.IsReadOnlyDevice(devicePath) {
+	if diskutils.IsEncryptedDevice(devicePath) || diskutils.IsReadOnlyDevice(devicePath) || doPseudoFsMount {
 		device = devicePath
 	} else {
 		uuid, err := GetUUID(devicePath)
@@ -821,6 +838,8 @@ func addEntryToFstab(installRoot, mountPoint, devicePath, fsType, mountArgs stri
 	pass := defaultPass
 	if mountPoint == rootfsMountPoint {
 		pass = rootPass
+	} else if doPseudoFsMount {
+		pass = disablePass
 	}
 
 	// Construct fstab entry and append to fstab file
@@ -1306,9 +1325,37 @@ func configureUserStartupCommand(installChroot *safechroot.Chroot, user configur
 }
 
 func provisionUserSSHCerts(installChroot *safechroot.Chroot, user configuration.User, homeDir string) (err error) {
+	var (
+		pubKeyData []string
+		exists     bool
+	)
 	const squashErrors = false
+	const authorizedKeysTempFilePerms = 0644
+	const authorizedKeysTempFile = "/tmp/authorized_keys"
 
 	userSSHKeyDir := filepath.Join(homeDir, ".ssh")
+	authorizedKeysFile := filepath.Join(homeDir, ".ssh/authorized_keys")
+
+	exists, err = file.PathExists(authorizedKeysTempFile)
+	if err != nil {
+		logger.Log.Warnf("Error accessing %s file : %v", authorizedKeysTempFile, err)
+		return
+	}
+	if !exists {
+		logger.Log.Debugf("File %s does not exist. Creating file...", authorizedKeysTempFile)
+		err = file.Create(authorizedKeysTempFile, authorizedKeysTempFilePerms)
+		if err != nil {
+			logger.Log.Warnf("Failed to create %s file : %v", authorizedKeysTempFile, err)
+			return
+		}
+	} else {
+		err = os.Truncate(authorizedKeysTempFile, 0)
+		if err != nil {
+			logger.Log.Warnf("Failed to truncate %s file : %v", authorizedKeysTempFile, err)
+			return
+		}
+	}
+	defer os.Remove(authorizedKeysTempFile)
 
 	for _, pubKey := range user.SSHPubKeyPaths {
 		logger.Log.Infof("Adding ssh key (%s) to user (%s)", filepath.Base(pubKey), user.Name)
@@ -1323,6 +1370,33 @@ func provisionUserSSHCerts(installChroot *safechroot.Chroot, user configuration.
 		if err != nil {
 			return
 		}
+
+		logger.Log.Infof("Adding ssh key (%s) to user (%s) .ssh/authorized_users", filepath.Base(pubKey), user.Name)
+		pubKeyData, err = file.ReadLines(pubKey)
+		if err != nil {
+			logger.Log.Warnf("Failed to read from SSHPubKey : %v", err)
+			return
+		}
+
+		// Append to the tmp/authorized_users file
+		for _, sshkey := range pubKeyData {
+			sshkey += "\n"
+			err = file.Append(sshkey, authorizedKeysTempFile)
+			if err != nil {
+				logger.Log.Warnf("Failed to append to %s : %v", authorizedKeysTempFile, err)
+				return
+			}
+		}
+	}
+
+	fileToCopy := safechroot.FileToCopy{
+		Src:  authorizedKeysTempFile,
+		Dest: authorizedKeysFile,
+	}
+
+	err = installChroot.AddFiles(fileToCopy)
+	if err != nil {
+		return
 	}
 
 	if len(user.SSHPubKeyPaths) != 0 {

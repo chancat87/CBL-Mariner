@@ -3,8 +3,8 @@
 %define soversion 1.1
 Summary:        Utilities from the general purpose cryptography library with TLS implementation
 Name:           openssl
-Version:        1.1.1g
-Release:        15%{?dist}
+Version:        1.1.1k
+Release:        4%{?dist}
 License:        OpenSSL
 Vendor:         Microsoft Corporation
 Distribution:   Mariner
@@ -24,27 +24,23 @@ Patch1:         CVE-2019-0190.nopatch
 Patch2:         0001-Replacing-deprecated-functions-with-NULL-or-highest.patch
 Patch3:         openssl-1.1.1-ec-curves.patch
 Patch4:         openssl-1.1.1-no-brainpool.patch
-Patch5:         openssl-1.1.0-issuer-hash.patch
-Patch6:         openssl-1.1.1-fips.patch
-Patch7:         openssl-1.1.1-version-override.patch
-Patch8:         openssl-1.1.1-seclevel.patch
-Patch9:         openssl-1.1.1-fips-post-rand.patch
-Patch10:        openssl-1.1.1-evp-kdf.patch
-Patch11:        openssl-1.1.1-ssh-kdf.patch
-Patch12:        openssl-1.1.1-krb5-kdf.patch
-Patch13:        openssl-1.1.1-edk2-build.patch
-Patch14:        openssl-1.1.1-fips-crng-test.patch
-Patch15:        openssl-1.1.1-fips-drbg-selftest.patch
-Patch16:        openssl-1.1.1-fips-dh.patch
-Patch17:        openssl-1.1.1-s390x-ecc.patch
-Patch18:        openssl-1.1.1-kdf-selftest.patch
-Patch19:        openssl-1.1.1-rewire-fips-drbg.patch
-Patch20:        openssl-1.1.1-explicit-params.patch
-Patch21:        openssl-1.1.1-fips-curves.patch
-Patch22:        CVE-2020-1971.patch
-Patch23:        openssl-1.1.1-sp80056arev3.patch
-Patch24:        CVE-2021-3449.patch
-Patch25:        CVE-2021-3450.patch
+Patch5:         openssl-1.1.1-fips.patch
+Patch6:         openssl-1.1.1-version-override.patch
+Patch7:         openssl-1.1.1-seclevel.patch
+Patch8:         openssl-1.1.1-fips-post-rand.patch
+Patch9:         openssl-1.1.1-evp-kdf.patch
+Patch10:        openssl-1.1.1-ssh-kdf.patch
+Patch11:        openssl-1.1.1-krb5-kdf.patch
+Patch12:        openssl-1.1.1-edk2-build.patch
+Patch13:        openssl-1.1.1-fips-crng-test.patch
+Patch14:        openssl-1.1.1-fips-drbg-selftest.patch
+Patch15:        openssl-1.1.1-fips-dh.patch
+Patch16:        openssl-1.1.1-s390x-ecc.patch
+Patch17:        openssl-1.1.1-kdf-selftest.patch
+Patch18:        openssl-1.1.1-fips-curves.patch
+Patch19:        openssl-1.1.1-sp80056arev3.patch
+Patch20:        openssl-1.1.1-jitterentropy.patch
+Patch21:        openssl-1.1.1-drbg-seed.patch
 BuildRequires:  perl-Test-Warnings
 BuildRequires:  perl-Text-Template
 Requires:       %{name}-libs = %{version}-%{release}
@@ -132,17 +128,14 @@ cp %{SOURCE4} test/
 %patch19 -p1
 %patch20 -p1
 %patch21 -p1
-%patch22 -p1
-%patch23 -p1
-%patch24 -p1
-%patch25 -p1
 
 %build
 # Add -Wa,--noexecstack here so that libcrypto's assembler modules will be
 # marked as not requiring an executable stack.
 # Also add -DPURIFY to make using valgrind with openssl easier as we do not
 # want to depend on the uninitialized memory as a source of entropy anyway.
-NEW_RPM_OPT_FLAGS="%{optflags} -Wa,--noexecstack -Wa,--generate-missing-build-notes=yes -DPURIFY $RPM_LD_FLAGS"
+# Also add -O0 to enable optimization, which is needed for jitterentropy
+NEW_RPM_OPT_FLAGS="%{optflags} -Wa,--noexecstack -Wa,--generate-missing-build-notes=yes -DPURIFY $RPM_LD_FLAGS -O0"
 
 export HASHBANGPERL=%{_bindir}/perl
 
@@ -330,6 +323,20 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Jun 15 2021 Nicolas Ontiveros <niontive@microsoft.com> - 1.1.1k-4
+- In FIPS mode, use jitterentropy for DRBG nonce.
+- In FIPS mode, concatenate Linux RNG with personalization string during DRBG instantiation
+- In FIPS mode, concatenate Linux RNG with additional input string during DRBG reseed 
+
+* Tue May 18 2021 Nicolas Ontiveros <niontive@microsoft.com> - 1.1.1k-3
+- In FIPS mode, use only jitterentropy for entropy pool
+
+* Tue May 11 2021 Nicolas Ontiveros <niontive@microsoft.com> - 1.1.1k-2
+- Remove FIPS DRBG rewire patch
+
+* Mon Mar 29 2021 Nicolas Ontiveros <niontive@microsoft.com> - 1.1.1k-1
+- Update to version 1.1.1k
+
 * Tue Mar 23 2021 Nicolas Ontiveros <niontive@microsoft.com> - 1.1.1g-15
 - Patch CVE-2021-3449 and CVE-2021-3450
 

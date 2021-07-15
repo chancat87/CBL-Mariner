@@ -2,7 +2,7 @@
 Summary:        A high-level scripting language
 Name:           python3
 Version:        3.7.10
-Release:        1%{?dist}
+Release:        3%{?dist}
 License:        PSF
 Vendor:         Microsoft Corporation
 Distribution:   Mariner
@@ -12,6 +12,7 @@ Source0:        https://www.python.org/ftp/python/%{version}/Python-%{version}.t
 Patch0:         cgi3.patch
 Patch1:         python3-support-mariner-platform.patch
 Patch2:         Replace-unsupported-TLS-methods.patch
+Patch3:         fix_broken_mariner_ssl_tests.patch
 BuildRequires:  bzip2-devel
 BuildRequires:  expat-devel >= 2.1.0
 BuildRequires:  libffi-devel >= 3.0.13
@@ -46,7 +47,6 @@ code. It is incompatible with Python 2.x releases.
 Summary:        The libraries for python runtime
 Group:          Applications/System
 Requires:       bzip2-libs
-Requires:       coreutils
 Requires:       expat >= 2.1.0
 Requires:       libffi >= 3.0.13
 Requires:       ncurses
@@ -254,6 +254,12 @@ make  %{?_smp_mflags} test
 %{_libdir}/python3.7/test/*
 
 %changelog
+* Fri May 07 2021 Daniel Burgener <daburgen@microsoft.com> 3.7.10-3
+- Remove coreutils dependency to remove circular dependency with libselinux
+
+* Wed Apr 28 2021 Andrew Phelps <anphel@microsoft.com> - 3.7.10-2
+- Add patch to fix test_ssl tests.
+
 * Mon Mar 01 2021 Thomas Crain <thcrain@microsoft.com> - 3.7.10-1
 - Update to 3.7.10, the latest security release for 3.7, to fix CVE-2021-23336
 - Remove backported patches for CVE-2020-27619, CVE-2021-3177
@@ -285,7 +291,7 @@ make  %{?_smp_mflags} test
 * Wed May 20 2020 Paul Monson <paulmon@microsoft.com> - 3.7.3-8
 - Fix variable use.
 
-* Sat May 09 00:20:54 PST 2020 Nick Samson <nisamson@microsoft.com> - 3.7.3-7
+* Sat May 09 2020 Nick Samson <nisamson@microsoft.com> - 3.7.3-7
 - Added %%license line automatically
 
 * Wed May 06 2020 Paul Monson <paulmon@microsoft.com> - 3.7.3-6
@@ -339,8 +345,7 @@ make  %{?_smp_mflags} test
 - Add python3-test package.
 
 * Fri Jun 30 2017 Dheeraj Shetty <dheerajs@vmware.com> - 3.6.1-5
-- Remove the imaplib tests.
-
+- Remove the imaplib tests.  
 * Mon Jun 05 2017 Xiaolin Li <xiaolinl@vmware.com> - 3.6.1-4
 - Added pip, setuptools, xml, and curses sub packages.
 

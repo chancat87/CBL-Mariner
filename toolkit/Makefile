@@ -23,6 +23,7 @@ INCREMENTAL_TOOLCHAIN           ?= n
 UPDATE_TOOLCHAIN_LIST           ?= n
 REBUILD_PACKAGES                ?= y
 DOWNLOAD_SRPMS                  ?= n
+ALLOW_SRPM_DOWNLOAD_FAIL        ?= n
 REBUILD_TOOLS                   ?= n
 RUN_CHECK                       ?= n
 USE_UPDATE_REPO                 ?= y
@@ -37,6 +38,7 @@ IMAGE_CACHE_SUMMARY             ?=
 INITRD_CACHE_SUMMARY            ?=
 PACKAGE_ARCHIVE                 ?=
 PACKAGE_BUILD_RETRIES           ?= 1
+REBUILD_DEP_CHAINS              ?= y
 
 # Folder defines
 toolkit_root     := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
